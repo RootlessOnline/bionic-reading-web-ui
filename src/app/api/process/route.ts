@@ -10,6 +10,23 @@ const execAsync = promisify(exec);
 const UPLOAD_DIR = '/tmp/bionic-uploads';
 const OUTPUT_DIR = '/tmp/bionic-output';
 
+// Use venv Python if available, fallback to system Python
+function getPythonPath(): string {
+  const possiblePaths = [
+    // Check for venv in current directory
+    path.join(process.cwd(), 'venv', 'bin', 'python3'),
+    path.join(process.cwd(), 'venv', 'bin', 'python'),
+    // Check home directory venvs
+    path.join(process.env.HOME || '', 'bionic-reading-converter', 'venv', 'bin', 'python3'),
+    path.join(process.env.HOME || '', 'bionic-reading-web-ui', 'venv', 'bin', 'python3'),
+    // System fallback
+    '/usr/bin/python3',
+    'python3',
+  ];
+
+  return possiblePaths[0]; // Use venv python from current directory
+}
+
 async function ensureDirectories() {
   try {
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
@@ -46,47 +63,30 @@ export async function POST(request: NextRequest) {
     await fs.writeFile(inputPath, buffer);
 
     const scriptPath = path.join(process.cwd(), 'scripts', 'process_pdf.py');
+    const pythonPath = getPythonPath();
     
-    // Run Python script and capture both stdout and stderr
-    const command = `python3 "${scriptPath}" "${inputPath}" -o "${outputPath}" -r ${emphasisRatio} -m ${minWordLength} -i ${boldIntensity} --json 2>&1`;
+    const command = `"${pythonPath}" "${scriptPath}" "${inputPath}" -o "${outputPath}" -r ${emphasisRatio} -m ${minWordLength} -i ${boldIntensity} --json 2>&1`;
     
     console.log('Running command:', command);
 
     let stdout = '';
-    let stderr = '';
     
     try {
       const result = await execAsync(command, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
       stdout = result.stdout;
-      stderr = result.stderr;
     } catch (execError: any) {
       console.error('Exec error:', execError);
-      // Try to parse error from stdout
       if (execError.stdout) {
-        try {
-          const errorResult = JSON.parse(execError.stdout);
-          if (errorResult.error) {
-            return NextResponse.json({ 
-              success: false, 
-              error: `Python error: ${errorResult.error}` 
-            }, { status: 500 });
-          }
-        } catch {
-          // Not JSON, return raw error
-          return NextResponse.json({ 
-            success: false, 
-            error: `Command failed: ${execError.stdout || execError.message}` 
-          }, { status: 500 });
-        }
+        stdout = execError.stdout;
+      } else {
+        return NextResponse.json({ 
+          success: false, 
+          error: `Command failed: ${execError.message}` 
+        }, { status: 500 });
       }
-      return NextResponse.json({ 
-        success: false, 
-        error: `Command failed: ${execError.message}` 
-      }, { status: 500 });
     }
 
-    console.log('Python stdout:', stdout);
-    console.log('Python stderr:', stderr);
+    console.log('Python output:', stdout);
 
     // Clean up input file
     try { await fs.unlink(inputPath); } catch {}
@@ -102,23 +102,23 @@ export async function POST(request: NextRequest) {
           result = parsed;
           break;
         }
-      } catch {
-        // Not JSON, continue
-      }
+      } catch {}
     }
 
     if (!result) {
-      result = { success: true, output_path: outputPath };
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Could not parse Python output: ' + stdout.substring(0, 200) 
+      }, { status: 500 });
     }
 
     if (result.success) {
-      // Verify output file exists
       try {
         await fs.access(outputPath);
       } catch {
         return NextResponse.json({ 
           success: false, 
-          error: 'Output file was not created. Check if Python dependencies are installed: pip install pdfplumber reportlab pypdf' 
+          error: 'Output file was not created' 
         }, { status: 500 });
       }
 
