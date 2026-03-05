@@ -46,10 +46,52 @@ export async function POST(request: NextRequest) {
     await fs.writeFile(inputPath, buffer);
 
     const scriptPath = path.join(process.cwd(), 'scripts', 'process_pdf.py');
-    const command = `python3 "${scriptPath}" "${inputPath}" -o "${outputPath}" -r ${emphasisRatio} -m ${minWordLength} -i ${boldIntensity} --json`;
+    
+    // Run Python script and capture both stdout and stderr
+    const command = `python3 "${scriptPath}" "${inputPath}" -o "${outputPath}" -r ${emphasisRatio} -m ${minWordLength} -i ${boldIntensity} --json 2>&1`;
+    
+    console.log('Running command:', command);
 
-    const { stdout } = await execAsync(command, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
+    let stdout = '';
+    let stderr = '';
+    
+    try {
+      const result = await execAsync(command, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
+      stdout = result.stdout;
+      stderr = result.stderr;
+    } catch (execError: any) {
+      console.error('Exec error:', execError);
+      // Try to parse error from stdout
+      if (execError.stdout) {
+        try {
+          const errorResult = JSON.parse(execError.stdout);
+          if (errorResult.error) {
+            return NextResponse.json({ 
+              success: false, 
+              error: `Python error: ${errorResult.error}` 
+            }, { status: 500 });
+          }
+        } catch {
+          // Not JSON, return raw error
+          return NextResponse.json({ 
+            success: false, 
+            error: `Command failed: ${execError.stdout || execError.message}` 
+          }, { status: 500 });
+        }
+      }
+      return NextResponse.json({ 
+        success: false, 
+        error: `Command failed: ${execError.message}` 
+      }, { status: 500 });
+    }
 
+    console.log('Python stdout:', stdout);
+    console.log('Python stderr:', stderr);
+
+    // Clean up input file
+    try { await fs.unlink(inputPath); } catch {}
+
+    // Parse result
     const lines = stdout.trim().split('\n');
     let result = null;
 
@@ -60,14 +102,26 @@ export async function POST(request: NextRequest) {
           result = parsed;
           break;
         }
-      } catch {}
+      } catch {
+        // Not JSON, continue
+      }
     }
 
-    if (!result) result = { success: true, output_path: outputPath };
-
-    try { await fs.unlink(inputPath); } catch {}
+    if (!result) {
+      result = { success: true, output_path: outputPath };
+    }
 
     if (result.success) {
+      // Verify output file exists
+      try {
+        await fs.access(outputPath);
+      } catch {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Output file was not created. Check if Python dependencies are installed: pip install pdfplumber reportlab pypdf' 
+        }, { status: 500 });
+      }
+
       return NextResponse.json({
         success: true,
         fileId,
@@ -76,12 +130,16 @@ export async function POST(request: NextRequest) {
         statistics: result.statistics || {}
       });
     } else {
-      return NextResponse.json({ success: false, error: result.error }, { status: 500 });
+      return NextResponse.json({ 
+        success: false, 
+        error: result.error || 'Processing failed' 
+      }, { status: 500 });
     }
   } catch (error) {
+    console.error('Processing error:', error);
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     }, { status: 500 });
   }
 }
