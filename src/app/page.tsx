@@ -50,7 +50,7 @@ interface PreviewState {
 
 const SAMPLE_TEXT = `Bionic reading is a revolutionary method designed to enhance reading speed and comprehension. By highlighting the initial letters or syllables of words, this technique guides the reader's eye through the text more efficiently. This approach is particularly beneficial for individuals with ADHD, dyslexia, or other attention-related challenges.
 
-The science behind bionic reading is based on how our brains process text. When we read, our eyes don't move smoothly across the page – they make quick jumps called saccades. By emphasizing the beginning of each word, bionic reading helps the brain anticipate and process text more quickly, reducing the cognitive load required for reading.`
+The science behind bionic reading is based on how our brains process text. When we read, our eyes don't move smoothly across the page – they make quick jumps called saccades. By emphasizing the beginning of each word, bionic reading helps the brain anticipate and process text more quickly.`
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null)
@@ -169,7 +169,7 @@ export default function Home() {
     if (!processing.fileId) return
 
     try {
-      const response = await fetch(\`/api/download/\${processing.fileId}\`)
+      const response = await fetch(`/api/download/${processing.fileId}`)
       if (!response.ok) throw new Error('Download failed')
       
       const blob = await response.blob()
