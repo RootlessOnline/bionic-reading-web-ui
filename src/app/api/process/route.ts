@@ -10,30 +10,9 @@ const execAsync = promisify(exec);
 const UPLOAD_DIR = '/tmp/bionic-uploads';
 const OUTPUT_DIR = '/tmp/bionic-output';
 
-// Use venv Python if available, fallback to system Python
-function getPythonPath(): string {
-  const possiblePaths = [
-    // Check for venv in current directory
-    path.join(process.cwd(), 'venv', 'bin', 'python3'),
-    path.join(process.cwd(), 'venv', 'bin', 'python'),
-    // Check home directory venvs
-    path.join(process.env.HOME || '', 'bionic-reading-converter', 'venv', 'bin', 'python3'),
-    path.join(process.env.HOME || '', 'bionic-reading-web-ui', 'venv', 'bin', 'python3'),
-    // System fallback
-    '/usr/bin/python3',
-    'python3',
-  ];
-
-  return possiblePaths[0]; // Use venv python from current directory
-}
-
 async function ensureDirectories() {
-  try {
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
-  } catch (error) {
-    console.error('Error creating directories:', error);
-  }
+  await fs.mkdir(UPLOAD_DIR, { recursive: true });
+  await fs.mkdir(OUTPUT_DIR, { recursive: true });
 }
 
 export async function POST(request: NextRequest) {
@@ -59,87 +38,54 @@ export async function POST(request: NextRequest) {
     const outputPath = path.join(OUTPUT_DIR, `${fileId}_bionic.pdf`);
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await fs.writeFile(inputPath, buffer);
+    await fs.writeFile(inputPath, Buffer.from(bytes));
 
     const scriptPath = path.join(process.cwd(), 'scripts', 'process_pdf.py');
-    const pythonPath = getPythonPath();
-    
-    const command = `"${pythonPath}" "${scriptPath}" "${inputPath}" -o "${outputPath}" -r ${emphasisRatio} -m ${minWordLength} -i ${boldIntensity} --json 2>&1`;
-    
-    console.log('Running command:', command);
+    const command = `python3 "${scriptPath}" "${inputPath}" -o "${outputPath}" -r ${emphasisRatio} -m ${minWordLength} -i ${boldIntensity} --json 2>&1`;
+
+    console.log('Running:', command);
 
     let stdout = '';
-    
     try {
-      const result = await execAsync(command, { timeout: 300000, maxBuffer: 50 * 1024 * 1024 });
+      const result = await execAsync(command, { timeout: 300000 });
       stdout = result.stdout;
-    } catch (execError: any) {
-      console.error('Exec error:', execError);
-      if (execError.stdout) {
-        stdout = execError.stdout;
-      } else {
-        return NextResponse.json({ 
-          success: false, 
-          error: `Command failed: ${execError.message}` 
-        }, { status: 500 });
-      }
+    } catch (e: any) {
+      stdout = e.stdout || e.message;
     }
 
-    console.log('Python output:', stdout);
+    console.log('Output:', stdout);
+    await fs.unlink(inputPath).catch(() => {});
 
-    // Clean up input file
-    try { await fs.unlink(inputPath); } catch {}
-
-    // Parse result
     const lines = stdout.trim().split('\n');
-    let result = null;
-
+    let data = null;
     for (const line of lines.reverse()) {
       try {
         const parsed = JSON.parse(line);
-        if (parsed.success !== undefined) {
-          result = parsed;
-          break;
-        }
+        if (parsed.success !== undefined) { data = parsed; break; }
       } catch {}
     }
 
-    if (!result) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Could not parse Python output: ' + stdout.substring(0, 200) 
-      }, { status: 500 });
+    if (!data) {
+      return NextResponse.json({ success: false, error: 'No valid output. Check Python dependencies: pip install pdfplumber reportlab pypdf' }, { status: 500 });
     }
 
-    if (result.success) {
-      try {
-        await fs.access(outputPath);
-      } catch {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Output file was not created' 
-        }, { status: 500 });
-      }
-
-      return NextResponse.json({
-        success: true,
-        fileId,
-        outputPath: `/api/download/${fileId}`,
-        fileName: file.name.replace('.pdf', '_bionic.pdf'),
-        statistics: result.statistics || {}
-      });
-    } else {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.error || 'Processing failed' 
-      }, { status: 500 });
+    if (!data.success) {
+      return NextResponse.json({ success: false, error: data.error }, { status: 500 });
     }
-  } catch (error) {
-    console.error('Processing error:', error);
+
+    try { await fs.access(outputPath); } catch {
+      return NextResponse.json({ success: false, error: 'Output file not created' }, { status: 500 });
+    }
+
     return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
-    }, { status: 500 });
+      success: true,
+      fileId,
+      outputPath: `/api/download/${fileId}`,
+      fileName: file.name.replace('.pdf', '_bionic.pdf'),
+      statistics: data.statistics || {}
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
   }
 }
