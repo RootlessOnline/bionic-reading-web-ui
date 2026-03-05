@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-PDF Processing Script for Web UI
-Wraps the core processing with JSON output for API consumption.
+PDF Processing Script - Uses Overlay Method
+
+This script processes PDFs using the overlay method which:
+- Preserves images
+- Maintains original layout
+- Keeps tables and formatting
+- Only modifies text styling
 """
 
 import sys
@@ -13,66 +18,35 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from bionic_reader import BionicReader, BionicConfig
-    from pdf_extractor import PDFExtractor, PDFDocument
-    from pdf_generator import PDFGenerator, GeneratorConfig
+    from bionic_overlay import process_pdf_with_overlay
 except ImportError as e:
-    print(json.dumps({"success": False, "error": f"Import error: {e}"}))
+    print(json.dumps({"success": False, "error": f"Import error: {e}. Please install requirements: pip install pdfplumber reportlab pypdf pikepdf"}))
     sys.exit(1)
 
+
 def process_pdf(input_path, output_path, ratio=0.4, min_length=3, intensity="medium"):
-    """Process PDF and return JSON result."""
+    """Process PDF using overlay method - preserves layout and images."""
     try:
-        # Extract
-        extractor = PDFExtractor(extract_images=False, extract_tables=False)
-        document = extractor.extract(input_path)
-        
-        # Create config
-        bionic_config = BionicConfig(
+        result = process_pdf_with_overlay(
+            input_path,
+            output_path,
             emphasis_ratio=ratio,
             min_word_length=min_length,
             bold_intensity=intensity
         )
-        
-        # Generate
-        generator_config = GeneratorConfig(
-            output_path=output_path,
-            apply_bionic=True,
-            bionic_config=bionic_config,
-            preserve_layout=True
-        )
-        
-        generator = PDFGenerator(generator_config)
-        generator.generate_simple_pdf(document)
-        
-        # Statistics
-        total_words = sum(
-            len(block.text.split())
-            for page in document.pages
-            for block in page.text_blocks
-        )
-        
-        return {
-            "success": True,
-            "output_path": output_path,
-            "statistics": {
-                "pages": document.num_pages,
-                "text_blocks": sum(len(p.text_blocks) for p in document.pages),
-                "estimated_words": total_words
-            }
-        }
-        
+        return result
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("input", help="Input PDF")
-    parser.add_argument("-o", "--output", required=True, help="Output PDF")
-    parser.add_argument("-r", "--ratio", type=float, default=0.4)
-    parser.add_argument("-m", "--min-length", type=int, default=3)
-    parser.add_argument("-i", "--intensity", default="medium")
-    parser.add_argument("--json", action="store_true")
+    parser = argparse.ArgumentParser(description='Process PDF with bionic reading (overlay method)')
+    parser.add_argument("input", help="Input PDF file")
+    parser.add_argument("-o", "--output", required=True, help="Output PDF file")
+    parser.add_argument("-r", "--ratio", type=float, default=0.4, help="Emphasis ratio (0.1-0.7)")
+    parser.add_argument("-m", "--min-length", type=int, default=3, help="Min word length")
+    parser.add_argument("-i", "--intensity", default="medium", help="Bold intensity: light, medium, heavy")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
     
     args = parser.parse_args()
     
@@ -84,4 +58,12 @@ if __name__ == "__main__":
         args.intensity
     )
     
-    print(json.dumps(result))
+    if args.json:
+        print(json.dumps(result))
+    else:
+        if result['success']:
+            print(f"\n✅ Success! Output: {result['output_path']}")
+            print(f"📊 Stats: {result['statistics']}")
+        else:
+            print(f"\n❌ Error: {result['error']}")
+            sys.exit(1)
