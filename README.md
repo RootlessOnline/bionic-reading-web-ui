@@ -1,92 +1,43 @@
-# Bionic Reading PDF Converter - Web UI
+# Bionic Reading PDF Converter
 
-A beautiful web interface for converting PDFs with bionic reading enhancement.
-
-## Prerequisites
-
-- **Node.js 18+**
-- **Python 3.8+**
-- pip
+Transform PDFs with bionic reading enhancement - optimized for ADHD readers.
 
 ## Quick Start
 
-### 1. Install Node.js Dependencies
-
 ```bash
-npm install
-# or
-yarn install
-# or  
-pnpm install
-```
+# Clone the repository
+git clone https://github.com/RootlessOnline/bionic-reading-web-ui.git
+cd bionic-reading-web-ui
 
-### 2. Install Python Dependencies
+# Run setup
+chmod +x setup.sh
+./setup.sh
 
-```bash
-cd scripts
-pip install -r requirements.txt
-# On Debian/Ubuntu, you may need:
-python3 -m venv venv
+# Start the app
 source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 3. Run the Development Server
-
-```bash
 npm run dev
-# or
-yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open http://localhost:3000 in your browser.
 
 ## Features
 
-- 🎨 Beautiful, accessible UI
-- 📤 Drag-and-drop PDF upload
-- ⚙️ Customizable settings (emphasis ratio, intensity, word length)
-- 👁️ Live preview of bionic transformation
-- 📊 Processing statistics
-- ⬇️ Easy download of enhanced PDFs
+- 📄 Preserve images and tables
+- ⚙️ Adjustable emphasis ratio
+- 🎚️ Light/Medium/Heavy intensity
+- 🖼️ Original layout preserved
+- ⚡ Fast processing
 
-## Configuration Options
+## Requirements
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Emphasis Ratio | Percentage of word to bold | 40% |
-| Min Word Length | Skip words shorter than this | 3 |
-| Bold Intensity | Light/Medium/Heavy | Medium |
-| Preserve Layout | Keep original formatting | Yes |
-
-## Project Structure
-
-```
-├── src/
-│   ├── app/
-│   │   ├── page.tsx          # Main UI
-│   │   ├── layout.tsx        # Root layout
-│   │   ├── globals.css       # Styles
-│   │   └── api/              # API routes
-│   │       ├── process/      # PDF processing
-│   │       ├── preview/      # Text preview
-│   │       └── download/     # File download
-│   ├── components/ui/        # UI components
-│   └── lib/utils.ts          # Utilities
-├── scripts/                   # Python backend
-│   ├── process_pdf.py
-│   ├── bionic_reader.py
-│   ├── pdf_extractor.py
-│   └── pdf_generator.py
-└── package.json
-```
+- Node.js 18+
+- Python 3.8+
+- pip
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, React 18, Tailwind CSS
-- **UI Components**: Radix UI, shadcn/ui style
-- **Backend**: Next.js API Routes
-- **PDF Processing**: Python (pdfplumber, reportlab, pypdf)
+- **Frontend**: Next.js, React, Tailwind CSS
+- **Backend**: Python (pdfplumber, reportlab, pypdf)
 
 ## License
 
